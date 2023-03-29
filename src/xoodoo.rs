@@ -32,3 +32,41 @@ fn cyclic_shift<const T: usize, const V: u32>(plane: &[u32]) -> [u32; 4] {
     }
     shifted
 }
+
+/// θ step mapping of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn theta(state: &mut [u32]) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+
+    let mut p = [0u32; 4];
+    unroll! {
+        for i in (0..12).step_by(4) {
+            p[0] ^= state[i + 0];
+            p[1] ^= state[i + 1];
+            p[2] ^= state[i + 2];
+            p[3] ^= state[i + 3];
+        }
+    }
+
+    let t0 = cyclic_shift::<1, 5>(&p);
+    let t1 = cyclic_shift::<1, 14>(&p);
+
+    let mut e = [0u32; 4];
+    unroll! {
+        for i in 0..4 {
+            e[i] = t0[i] ^ t1[i];
+        }
+    }
+
+    unroll! {
+        for i in (0..12).step_by(4) {
+            state[i + 0] ^= e[0];
+            state[i + 1] ^= e[1];
+            state[i + 2] ^= e[2];
+            state[i + 3] ^= e[3];
+        }
+    }
+}
