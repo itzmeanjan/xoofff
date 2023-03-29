@@ -70,3 +70,33 @@ fn theta(state: &mut [u32]) {
         }
     }
 }
+
+/// ρ_west step mapping function of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn rho_west(state: &mut [u32]) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+
+    let t0 = cyclic_shift::<1, 0>(&state[4..8]);
+    let t1 = cyclic_shift::<0, 11>(&state[8..12]);
+
+    state[4..8].copy_from_slice(&t0);
+    state[8..12].copy_from_slice(&t1);
+}
+
+/// ρ_east step mapping function of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn rho_east(state: &mut [u32]) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+
+    let t0 = cyclic_shift::<0, 1>(&state[4..8]);
+    let t1 = cyclic_shift::<2, 8>(&state[8..12]);
+
+    state[4..8].copy_from_slice(&t0);
+    state[8..12].copy_from_slice(&t1);
+}
