@@ -149,3 +149,19 @@ fn chi(state: &mut [u32]) {
         }
     }
 }
+
+/// Round function of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn round(state: &mut [u32], ridx: usize) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+    debug_assert!(ridx < MAX_ROUNDS, "Round index must ∈ [0, MAX_ROUNDS) !");
+
+    theta(state);
+    rho_west(state);
+    iota(state, ridx);
+    chi(state);
+    rho_east(state);
+}
