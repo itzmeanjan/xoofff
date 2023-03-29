@@ -100,3 +100,14 @@ fn rho_east(state: &mut [u32]) {
     state[4..8].copy_from_slice(&t0);
     state[8..12].copy_from_slice(&t1);
 }
+
+/// ι step mapping function of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn iota(state: &mut [u32], ridx: usize) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+
+    state[0] ^= RC[ridx]
+}
