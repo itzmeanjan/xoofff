@@ -18,7 +18,7 @@ const RC: [u32; MAX_ROUNDS] = [
 /// Note, at bit index z = 0, least significant bit of each lane lives.
 /// See row 2 of table 1 of https://ia.cr/2018/767.
 #[inline(always)]
-fn cyclic_shift<const T: usize, const V: u32>(plane: &[u32]) -> [u32; 4] {
+pub fn cyclic_shift<const T: usize, const V: u32>(plane: &[u32]) -> [u32; 4] {
     debug_assert!(
         plane.len() == 4,
         "Each lane of Xoodoo permutation state must have four lanes !"
