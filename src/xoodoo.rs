@@ -165,3 +165,22 @@ fn round(state: &mut [u32], ridx: usize) {
     chi(state);
     rho_east(state);
 }
+
+/// Xoodoo\[n_r\] permutation function s.t. n_r ( <= MAX_ROUNDS ) times round function
+/// is applied on permutation state, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+pub fn permute<const ROUNDS: usize>(state: &mut [u32]) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+    debug_assert!(
+        ROUNDS <= MAX_ROUNDS,
+        "Requested rounds must be < MAX_ROUNDS !"
+    );
+
+    let start = MAX_ROUNDS - ROUNDS;
+    for ridx in start..MAX_ROUNDS {
+        round(state, ridx);
+    }
+}
