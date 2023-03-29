@@ -111,3 +111,41 @@ fn iota(state: &mut [u32], ridx: usize) {
 
     state[0] ^= RC[ridx]
 }
+
+/// χ step mapping function of Xoodoo permutation, as described in algorithm 1 of https://ia.cr/2018/767.
+#[inline(always)]
+fn chi(state: &mut [u32]) {
+    debug_assert!(
+        state.len() == 12,
+        "Xoodoo permutation state must have 12 lanes !"
+    );
+
+    let mut b0 = [0u32; 4];
+    unroll! {
+        for i in 0..4 {
+            b0[i] = !state[4 + i] & state[8 + i];
+        }
+    }
+
+    let mut b1 = [0u32; 4];
+    unroll! {
+        for i in 0..4 {
+            b1[i] = !state[8 + i] & state[i];
+        }
+    }
+
+    let mut b2 = [0u32; 4];
+    unroll! {
+        for i in 0..4 {
+            b2[i] = !state[i] & state[4 + i];
+        }
+    }
+
+    unroll! {
+        for i in 0..4 {
+            state[i] ^= b0[i];
+            state[4 + i] ^= b1[i];
+            state[8 + i] ^= b2[i];
+        }
+    }
+}
