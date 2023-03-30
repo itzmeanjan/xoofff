@@ -3,3 +3,4 @@ mod rolling;
 pub mod xoodoo;
 #[cfg(not(feature = "dev"))]
 mod xoodoo;
+pub mod xoofff;
