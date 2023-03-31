@@ -20,11 +20,16 @@ const LANE_CNT: usize = BLOCK_SIZE / std::mem::size_of::<u32>();
 /// Also see https://ia.cr/2018/767 for definition of Xoofff.
 #[derive(Clone, Copy)]
 pub struct Xoofff {
-    masked_key: [u32; LANE_CNT],
-    input_mask: [u32; LANE_CNT],
-    accumulator: [u32; LANE_CNT],
-    input_block_index: usize,
-    output_block_index: usize,
+    mkey: [u32; LANE_CNT],  // masked key
+    imask: [u32; LANE_CNT], // input mask
+    acc: [u32; LANE_CNT],   // accumulator
+    iblk: [u8; BLOCK_SIZE], // input message block ( buffer )
+    oblk: [u8; BLOCK_SIZE], // output message block ( buffer )
+    ioff: usize,            // offset into input message block
+    ooff: usize,            // offset into output message block
+    finalized: usize,       // is deck function state finalized ?
+    iblkidx: usize,         // input block index
+    oblkidx: usize,         // output block index
 }
 
 impl Xoofff {
@@ -44,29 +49,41 @@ impl Xoofff {
         xoodoo::permute::<ROUNDS>(&mut masked_key);
 
         Self {
-            masked_key,
-            input_mask: masked_key,
-            accumulator: [0u32; LANE_CNT],
-            input_block_index: 0,
-            output_block_index: 0,
+            mkey: masked_key,
+            imask: masked_key,
+            acc: [0u32; LANE_CNT],
+            iblk: [0u8; BLOCK_SIZE],
+            oblk: [0u8; BLOCK_SIZE],
+            ioff: 0,
+            ooff: 0,
+            finalized: usize::MIN,
+            iblkidx: 0,
+            oblkidx: 0,
         }
     }
 
     /// Given a message M of byte length N (>=0), this routine can be used for absorbing
     /// message bytes into the state of the deck function Xoofff, following algorithm 1,
-    /// defined in Farfalle specification https://ia.cr/2016/1188
+    /// defined in Farfalle specification https://ia.cr/2016/1188.
+    ///
+    /// Note, this function can be called multiple times until Xoofff state is finalized. Once
+    /// finalized, bytes can be squeezed out of deck function state. Even after finalization
+    /// new absorption->finalization->squeezing phase can be started by calling restart function.
     #[inline(always)]
     pub fn absorb(&mut self, msg: &[u8]) {
-        let blk_cnt = (msg.len() + BLOCK_SIZE) / BLOCK_SIZE;
+        let blk_cnt = (self.ioff + msg.len()) / BLOCK_SIZE;
+        let mut moff = 0;
 
-        for i in 0..blk_cnt {
-            let block = get_ith_block(msg, i);
-            let mut words = bytes_to_le_words(block);
+        for _ in 0..blk_cnt {
+            let byte_cnt = BLOCK_SIZE - self.ioff;
+
+            self.iblk[self.ioff..].copy_from_slice(&msg[moff..(moff + byte_cnt)]);
+            let mut words = bytes_to_le_words(self.iblk);
 
             debug_assert_eq!(LANE_CNT, 12);
             unroll! {
-                for j in 0..12 {
-                    words[j] ^= self.input_mask[j];
+                for i in 0..12 {
+                    words[i] ^= self.imask[i];
                 }
             }
 
@@ -74,16 +91,22 @@ impl Xoofff {
 
             debug_assert_eq!(LANE_CNT, 12);
             unroll! {
-                for j in 0..12 {
-                    self.accumulator[j] ^= words[j];
+                for i in 0..12 {
+                    self.acc[i] ^= words[i];
                 }
             }
 
-            self.input_block_index += 1;
-            rolling::roll_xc(&mut self.input_mask);
+            rolling::roll_xc(&mut self.imask);
+            moff += byte_cnt;
+            self.ioff = 0;
         }
 
-        rolling::roll_xc(&mut self.input_mask);
+        let rm_bytes = msg.len() - moff;
+        let dst_frm = self.ioff;
+        let dst_to = dst_frm + rm_bytes;
+
+        self.iblk[dst_frm..dst_to].copy_from_slice(&msg[moff..]);
+        self.ioff += rm_bytes;
     }
 }
 
