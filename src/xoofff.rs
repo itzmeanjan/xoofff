@@ -71,6 +71,10 @@ impl Xoofff {
     /// new absorption->finalization->squeezing phase can be started by calling restart function.
     #[inline(always)]
     pub fn absorb(&mut self, msg: &[u8]) {
+        if self.finalized == usize::MAX {
+            return;
+        }
+
         let blk_cnt = (self.ioff + msg.len()) / BLOCK_SIZE;
         let mut moff = 0;
 
@@ -107,6 +111,58 @@ impl Xoofff {
 
         self.iblk[dst_frm..dst_to].copy_from_slice(&msg[moff..]);
         self.ioff += rm_bytes;
+    }
+
+    /// Given that arbitrary many message bytes are already absorbed into deck function
+    /// state, this routine can be used for finalizing the state, so that arbitrary many
+    /// bytes can be squeezed out of deck function state.
+    ///
+    /// - Once finalized, calling this routine again on same object does nothing.
+    /// - Attempting to absorb new message bytes on already finalized state, does nothing.
+    /// - After finalization, one might start squeezing arbitrary many output bytes.
+    /// - After finishing squeezing, when new message arrives, arbitrary many bytes
+    /// can be consumed into deck function state, by restarting `absorb -> finalize -> squeeze` cycle.
+    #[inline(always)]
+    pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize) {
+        debug_assert!(
+            ds_bit_width <= 7,
+            "Domain seperator bit width is not allowed to be > 7"
+        );
+
+        if self.finalized == usize::MAX {
+            return;
+        }
+
+        let mask = (1u8 << ds_bit_width) - 1u8;
+        let pad_byte = (1u8 << ds_bit_width) | (domain_seperator & mask);
+
+        self.iblk[self.ioff] = pad_byte;
+        self.iblk[(self.ioff + 1)..].fill(0);
+
+        let mut words = bytes_to_le_words(self.iblk);
+
+        debug_assert_eq!(LANE_CNT, 12);
+        unroll! {
+            for i in 0..12 {
+                words[i] ^= self.imask[i];
+            }
+        }
+
+        xoodoo::permute::<ROUNDS>(&mut words);
+
+        debug_assert_eq!(LANE_CNT, 12);
+        unroll! {
+            for i in 0..12 {
+                self.acc[i] ^= words[i];
+            }
+        }
+
+        rolling::roll_xc(&mut self.imask);
+        rolling::roll_xc(&mut self.imask);
+
+        self.iblk.fill(0);
+        self.ioff = 0;
+        self.finalized = usize::MAX;
     }
 }
 
