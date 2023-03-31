@@ -1,4 +1,5 @@
 use crate::xoodoo;
+use std::cmp;
 
 /// Xoodoo\[n_r\] being a 384 -bit permutation, messages are consumed in 48 -bytes chunks
 const BLOCK_SIZE: usize = 48;
@@ -71,4 +72,29 @@ fn pad10x(msg: &[u8]) -> [u8; BLOCK_SIZE] {
     res[mlen] = 0x01;
 
     res
+}
+
+/// Given a message of byte length N ( >=0 ), this routine can be used for extracting out
+/// i-th message block s.t. `msg` is first padded using `pad10*` rule so that padded message
+/// length becomes a multiple of BLOCK_SIZE.
+///
+/// Block index `i` can take values from interval `[0..((msg.len() + BLOCK_SIZE) / BLOCK_SIZE))`
+fn get_ith_block(msg: &[u8], i: usize) -> [u8; BLOCK_SIZE] {
+    debug_assert!(
+        i >= ((msg.len() + BLOCK_SIZE) / BLOCK_SIZE),
+        "Maximum valid message block index can be {}",
+        (((msg.len() + BLOCK_SIZE) / BLOCK_SIZE) - 1)
+    );
+
+    let start = i * BLOCK_SIZE;
+    let end = (i + 1) * BLOCK_SIZE;
+
+    if end <= msg.len() {
+        let mut block = [0u8; BLOCK_SIZE];
+        block.copy_from_slice(&msg[start..end]);
+
+        return block;
+    }
+
+    pad10x(&msg[cmp::min(start, msg.len())..])
 }
