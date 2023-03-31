@@ -36,13 +36,9 @@ impl Xoofff {
             BLOCK_SIZE
         );
 
-        let padded_key = pad10x(key);
-
         // masked key derivation phase
-        let mut masked_key = [0u32; LANE_CNT];
-        for i in 0..LANE_CNT {
-            masked_key[i] = u32::from_le_bytes(padded_key[i * 4..(i + 1) * 4].try_into().unwrap());
-        }
+        let padded_key = pad10x(key);
+        let mut masked_key = bytes_to_le_words(padded_key);
         xoodoo::permute::<ROUNDS>(&mut masked_key);
 
         Self {
@@ -97,4 +93,15 @@ fn get_ith_block(msg: &[u8], i: usize) -> [u8; BLOCK_SIZE] {
     }
 
     pad10x(&msg[cmp::min(start, msg.len())..])
+}
+
+/// Given a byte array of length 48, this routine interprets those bytes as 12 unsigned
+/// 32 -bit integers (= u32) s.t. four consecutive bytes are placed in little endian order
+/// in a u32 word.
+fn bytes_to_le_words(bytes: [u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
+    let mut words = [0u32; LANE_CNT];
+    for i in 0..LANE_CNT {
+        words[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
+    }
+    words
 }
