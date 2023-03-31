@@ -1,4 +1,6 @@
+use crate::rolling;
 use crate::xoodoo;
+use crunchy::unroll;
 use std::cmp;
 
 /// Xoodoo\[n_r\] being a 384 -bit permutation, messages are consumed in 48 -bytes chunks
@@ -49,6 +51,40 @@ impl Xoofff {
             output_block_index: 0,
         }
     }
+
+    /// Given a message M of byte length N (>=0), this routine can be used for absorbing
+    /// message bytes into the state of the deck function Xoofff, following algorithm 1,
+    /// defined in Farfalle specification https://ia.cr/2016/1188
+    #[inline(always)]
+    pub fn absorb(&mut self, msg: &[u8]) {
+        let blk_cnt = (msg.len() + BLOCK_SIZE) / BLOCK_SIZE;
+
+        for i in 0..blk_cnt {
+            let block = get_ith_block(msg, i);
+            let mut words = bytes_to_le_words(block);
+
+            debug_assert_eq!(LANE_CNT, 12);
+            unroll! {
+                for j in 0..12 {
+                    words[j] ^= self.input_mask[j];
+                }
+            }
+
+            xoodoo::permute::<ROUNDS>(&mut words);
+
+            debug_assert_eq!(LANE_CNT, 12);
+            unroll! {
+                for j in 0..12 {
+                    self.accumulator[j] ^= words[j];
+                }
+            }
+
+            self.input_block_index += 1;
+            rolling::roll_xc(&mut self.input_mask);
+        }
+
+        rolling::roll_xc(&mut self.input_mask);
+    }
 }
 
 /// Given a message of length N -bytes ( s.t. N < 48 ), this routine pads the
@@ -75,6 +111,7 @@ fn pad10x(msg: &[u8]) -> [u8; BLOCK_SIZE] {
 /// length becomes a multiple of BLOCK_SIZE.
 ///
 /// Block index `i` can take values from interval `[0..((msg.len() + BLOCK_SIZE) / BLOCK_SIZE))`
+#[inline(always)]
 fn get_ith_block(msg: &[u8], i: usize) -> [u8; BLOCK_SIZE] {
     debug_assert!(
         i >= ((msg.len() + BLOCK_SIZE) / BLOCK_SIZE),
@@ -98,10 +135,15 @@ fn get_ith_block(msg: &[u8], i: usize) -> [u8; BLOCK_SIZE] {
 /// Given a byte array of length 48, this routine interprets those bytes as 12 unsigned
 /// 32 -bit integers (= u32) s.t. four consecutive bytes are placed in little endian order
 /// in a u32 word.
+#[inline(always)]
 fn bytes_to_le_words(bytes: [u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
     let mut words = [0u32; LANE_CNT];
-    for i in 0..LANE_CNT {
-        words[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
+
+    debug_assert_eq!(LANE_CNT, 12);
+    unroll! {
+        for i in 0..12 {
+            words[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
+        }
     }
     words
 }
