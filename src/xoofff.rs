@@ -127,6 +127,10 @@ impl Xoofff {
             "# -of bits to be dropped during squeezing must be multiple of 8"
         );
         debug_assert!(
+            (Q >> 3) < BLOCK_SIZE,
+            "Byte offset, considered during squeezing, must be < 48 -bytes"
+        );
+        debug_assert!(
             ds_bit_width <= 7,
             "Domain seperator bit width is not allowed to be > 7"
         );
