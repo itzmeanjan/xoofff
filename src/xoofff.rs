@@ -121,13 +121,13 @@ impl Xoofff {
     /// - After finishing squeezing, when new message arrives, arbitrary many bytes
     /// can be consumed into deck function state, by restarting `absorb -> finalize -> squeeze` cycle.
     #[inline(always)]
-    pub fn finalize<const Q: usize>(&mut self, domain_seperator: u8, ds_bit_width: usize) {
+    pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset: usize) {
         debug_assert!(
-            Q % 8 == 0,
+            offset % 8 == 0,
             "# -of bits to be dropped during squeezing must be multiple of 8"
         );
         debug_assert!(
-            (Q >> 3) < BLOCK_SIZE,
+            (offset >> 3) < BLOCK_SIZE,
             "Byte offset, considered during squeezing, must be < 48 -bytes"
         );
         debug_assert!(
@@ -184,9 +184,48 @@ impl Xoofff {
         }
 
         words_to_le_bytes(&words, &mut self.oblk);
-        self.ooff = Q >> 3;
+        self.ooff = offset >> 3;
 
         rolling::roll_xe(&mut self.omask);
+    }
+
+    /// Given that N -many message bytes are already absorbed into deck function state and
+    /// state is finalized, this routine can be used for squeezing arbitrary many bytes out
+    /// of deck function state. One can call this function arbitrary many times, each time
+    /// requesting arbitrary many bytes, if and only if state is already finalized and it's
+    /// not yet restarted for processing another message using `absorb->finalize->squeeze` cycle.
+    #[inline(always)]
+    pub fn squeeze(&mut self, out: &mut [u8]) {
+        if self.finalized != usize::MAX {
+            return;
+        }
+
+        let mut off = 0;
+
+        while off < out.len() {
+            let read = cmp::min(BLOCK_SIZE - self.ooff, out.len() - off);
+            out[off..(off + read)].copy_from_slice(&self.oblk[self.ooff..(self.ooff + read)]);
+
+            self.ooff += read;
+            off += read;
+
+            if self.ooff == BLOCK_SIZE {
+                let mut words = self.omask;
+                xoodoo::permute::<ROUNDS>(&mut words);
+
+                debug_assert_eq!(LANE_CNT, 12);
+                unroll! {
+                    for i in 0..12 {
+                        words[i] ^= self.imask[i];
+                    }
+                }
+
+                words_to_le_bytes(&words, &mut self.oblk);
+                self.ooff = 0;
+
+                rolling::roll_xe(&mut self.omask);
+            }
+        }
     }
 }
 
