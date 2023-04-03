@@ -136,8 +136,8 @@ impl Xoofff {
         let mask = (1u8 << ds_bit_width) - 1u8;
         let pad_byte = (1u8 << ds_bit_width) | (domain_seperator & mask);
 
+        self.iblk[self.ioff..].fill(0);
         self.iblk[self.ioff] = pad_byte;
-        self.iblk[(self.ioff + 1)..].fill(0);
 
         let mut words = bytes_to_le_words(self.iblk);
 
