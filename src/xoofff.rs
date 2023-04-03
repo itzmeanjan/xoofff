@@ -22,14 +22,13 @@ const LANE_CNT: usize = BLOCK_SIZE / std::mem::size_of::<u32>();
 pub struct Xoofff {
     mkey: [u32; LANE_CNT],  // masked key
     imask: [u32; LANE_CNT], // input mask
+    omask: [u32; LANE_CNT], // output mask
     acc: [u32; LANE_CNT],   // accumulator
     iblk: [u8; BLOCK_SIZE], // input message block ( buffer )
     oblk: [u8; BLOCK_SIZE], // output message block ( buffer )
     ioff: usize,            // offset into input message block
     ooff: usize,            // offset into output message block
     finalized: usize,       // is deck function state finalized ?
-    iblkidx: usize,         // input block index
-    oblkidx: usize,         // output block index
 }
 
 impl Xoofff {
@@ -45,20 +44,19 @@ impl Xoofff {
 
         // masked key derivation phase
         let padded_key = pad10x(key);
-        let mut masked_key = bytes_to_le_words(padded_key);
+        let mut masked_key = bytes_to_le_words(&padded_key);
         xoodoo::permute::<ROUNDS>(&mut masked_key);
 
         Self {
             mkey: masked_key,
             imask: masked_key,
+            omask: [0u32; LANE_CNT],
             acc: [0u32; LANE_CNT],
             iblk: [0u8; BLOCK_SIZE],
             oblk: [0u8; BLOCK_SIZE],
             ioff: 0,
             ooff: 0,
             finalized: usize::MIN,
-            iblkidx: 0,
-            oblkidx: 0,
         }
     }
 
@@ -82,7 +80,7 @@ impl Xoofff {
             let byte_cnt = BLOCK_SIZE - self.ioff;
 
             self.iblk[self.ioff..].copy_from_slice(&msg[moff..(moff + byte_cnt)]);
-            let mut words = bytes_to_le_words(self.iblk);
+            let mut words = bytes_to_le_words(&self.iblk);
 
             debug_assert_eq!(LANE_CNT, 12);
             unroll! {
@@ -123,7 +121,11 @@ impl Xoofff {
     /// - After finishing squeezing, when new message arrives, arbitrary many bytes
     /// can be consumed into deck function state, by restarting `absorb -> finalize -> squeeze` cycle.
     #[inline(always)]
-    pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize) {
+    pub fn finalize<const Q: usize>(&mut self, domain_seperator: u8, ds_bit_width: usize) {
+        debug_assert!(
+            Q % 8 == 0,
+            "# -of bits to be dropped during squeezing must be multiple of 8"
+        );
         debug_assert!(
             ds_bit_width <= 7,
             "Domain seperator bit width is not allowed to be > 7"
@@ -139,7 +141,7 @@ impl Xoofff {
         self.iblk[self.ioff..].fill(0);
         self.iblk[self.ioff] = pad_byte;
 
-        let mut words = bytes_to_le_words(self.iblk);
+        let mut words = bytes_to_le_words(&self.iblk);
 
         debug_assert_eq!(LANE_CNT, 12);
         unroll! {
@@ -163,6 +165,24 @@ impl Xoofff {
         self.iblk.fill(0);
         self.ioff = 0;
         self.finalized = usize::MAX;
+
+        self.omask.copy_from_slice(&self.acc);
+        xoodoo::permute::<ROUNDS>(&mut self.omask);
+
+        let mut words = self.omask;
+        xoodoo::permute::<ROUNDS>(&mut words);
+
+        debug_assert_eq!(LANE_CNT, 12);
+        unroll! {
+            for i in 0..12 {
+                words[i] ^= self.imask[i];
+            }
+        }
+
+        words_to_le_bytes(&words, &mut self.oblk);
+        self.ooff = Q >> 3;
+
+        rolling::roll_xe(&mut self.omask);
     }
 }
 
@@ -185,37 +205,11 @@ fn pad10x(msg: &[u8]) -> [u8; BLOCK_SIZE] {
     res
 }
 
-/// Given a message of byte length N ( >=0 ), this routine can be used for extracting out
-/// i-th message block s.t. `msg` is first padded using `pad10*` rule so that padded message
-/// length becomes a multiple of BLOCK_SIZE.
-///
-/// Block index `i` can take values from interval `[0..((msg.len() + BLOCK_SIZE) / BLOCK_SIZE))`
-#[inline(always)]
-fn get_ith_block(msg: &[u8], i: usize) -> [u8; BLOCK_SIZE] {
-    debug_assert!(
-        i >= ((msg.len() + BLOCK_SIZE) / BLOCK_SIZE),
-        "Maximum valid message block index can be {}",
-        (((msg.len() + BLOCK_SIZE) / BLOCK_SIZE) - 1)
-    );
-
-    let start = i * BLOCK_SIZE;
-    let end = (i + 1) * BLOCK_SIZE;
-
-    if end <= msg.len() {
-        let mut block = [0u8; BLOCK_SIZE];
-        block.copy_from_slice(&msg[start..end]);
-
-        return block;
-    }
-
-    pad10x(&msg[cmp::min(start, msg.len())..])
-}
-
 /// Given a byte array of length 48, this routine interprets those bytes as 12 unsigned
 /// 32 -bit integers (= u32) s.t. four consecutive bytes are placed in little endian order
 /// in a u32 word.
 #[inline(always)]
-fn bytes_to_le_words(bytes: [u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
+fn bytes_to_le_words(bytes: &[u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
     let mut words = [0u32; LANE_CNT];
 
     debug_assert_eq!(LANE_CNT, 12);
@@ -225,4 +219,14 @@ fn bytes_to_le_words(bytes: [u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
         }
     }
     words
+}
+
+#[inline(always)]
+fn words_to_le_bytes(words: &[u32; LANE_CNT], bytes: &mut [u8; BLOCK_SIZE]) {
+    debug_assert_eq!(LANE_CNT, 12);
+    unroll! {
+        for i in 0..12 {
+            bytes[i*4..(i+1)*4].copy_from_slice(&words[i].to_le_bytes());
+        }
+    }
 }
