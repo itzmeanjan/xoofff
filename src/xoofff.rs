@@ -131,8 +131,8 @@ impl Xoofff {
     #[inline(always)]
     pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset: usize) {
         debug_assert!(
-            offset < BLOCK_SIZE,
-            "Byte offset, considered during squeezing, must be < 48 -bytes"
+            offset <= BLOCK_SIZE,
+            "Byte offset, considered during squeezing, must be <= 48 -bytes"
         );
         debug_assert!(
             ds_bit_width <= 7,
