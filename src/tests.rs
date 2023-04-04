@@ -3,17 +3,15 @@ use rand::{thread_rng, RngCore};
 use std::cmp;
 use test_case::test_case;
 
-#[test_case(32, 0, 32, 0b1, 1, 0; "key = 32bytes message = 0bytes digest = 32bytes offset = 0bits")]
-#[test_case(16, 32, 64, 0b11, 2, 0; "key = 16bytes message = 32bytes digest = 64bytes offset = 0bits")]
-#[test_case(32, 64, 128, 0b101, 3, 8; "key = 32bytes message = 64bytes digest = 128bytes offset = 8bits")]
-#[test_case(32, 128, 256, 0b101, 3, 16; "key = 32bytes message = 128bytes digest = 256bytes offset = 16bits")]
-#[test_case(32, 256, 512, 0b1101, 4, 32; "key = 32bytes message = 256bytes digest = 512bytes offset = 32bits")]
-#[test_case(32, 512, 1024, 0b10101, 5, 64; "key = 32bytes message = 512bytes digest = 1024bytes offset = 64bits")]
-#[test_case(32, 1024, 2048, 0, 0, 128; "key = 32bytes message = 1024bytes digest = 2048bytes offset = 128bits")]
-#[test_case(47, 2048, 4096, 0b1, 2, 128; "key = 47bytes message = 1024bytes digest = 4096bytes offset = 128bits")]
-#[test_case(48, 1024, 32, 0, 0, 128 => panics; "key = 48bytes message = 1024bytes digest = 32bytes offset = 128bits")]
-#[test_case(32, 1024, 32, 0, 0, 127 => panics; "key = 32bytes message = 1024bytes digest = 32bytes offset = 127bits")]
-#[test_case(49, 16, 32, 0b1, 2, 255 => panics; "key = 49bytes message = 1024bytes digest = 32bytes offset = 255bits")]
+#[test_case(32, 0, 32, 0b1, 1, 0; "key = 32B message = 0B digest = 32B offset = 0B")]
+#[test_case(16, 32, 64, 0b11, 2, 0; "key = 16B message = 32B digest = 64B offset = 0B")]
+#[test_case(32, 64, 128, 0b101, 3, 1; "key = 32B message = 64B digest = 128B offset = 1B")]
+#[test_case(32, 128, 256, 0b101, 3, 2; "key = 32B message = 128B digest = 256B offset = 2B")]
+#[test_case(32, 256, 512, 0b1101, 4, 4; "key = 32B message = 256B digest = 512B offset = 4B")]
+#[test_case(32, 512, 1024, 0b10101, 5, 8; "key = 32B message = 512B digest = 1024B offset = 8B")]
+#[test_case(32, 1024, 2048, 0, 0, 16; "key = 32B message = 1024B digest = 2048B offset = 16B")]
+#[test_case(47, 2048, 4096, 0b1, 2, 16; "key = 47B message = 1024B digest = 4096B offset = 16B")]
+#[test_case(48, 1024, 32, 0, 0, 16 => panics; "key = 48B message = 1024B digest = 32B offset = 16B")]
 fn test_xoofff_incremental_io(
     klen: usize,
     mlen: usize,
