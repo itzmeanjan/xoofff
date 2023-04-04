@@ -16,7 +16,10 @@ fn xoofff<
     group.throughput(Throughput::Bytes((MLEN + DLEN + OFFSET) as u64));
 
     group.bench_function(
-        format!("{}/{}/{} | offset = {} (cached)", KLEN, MLEN, DLEN, OFFSET),
+        format!(
+            "key = {} | in = {} | out = {} | offset = {} (cached)",
+            KLEN, MLEN, DLEN, OFFSET
+        ),
         |bench| {
             let mut key = vec![0u8; KLEN];
             let mut msg = vec![0u8; MLEN];
@@ -36,7 +39,10 @@ fn xoofff<
     );
 
     group.bench_function(
-        format!("{}/{}/{} | offset = {} (random)", KLEN, MLEN, DLEN, OFFSET),
+        format!(
+            "key = {} | in = {} | out = {} | offset = {} (random)",
+            KLEN, MLEN, DLEN, OFFSET
+        ),
         |bench| {
             let mut key = vec![0u8; KLEN];
             let mut msg = vec![0u8; MLEN];
