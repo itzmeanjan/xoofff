@@ -129,13 +129,13 @@ impl Xoofff {
     ///
     /// This routine implements portion of algorithm 1 of https://ia.cr/2016/1188.
     #[inline(always)]
-    pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset: usize) {
+    pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset_bits: usize) {
         debug_assert!(
-            offset % 8 == 0,
+            offset_bits % 8 == 0,
             "# -of bits to be dropped during squeezing must be multiple of 8"
         );
         debug_assert!(
-            (offset >> 3) < BLOCK_SIZE,
+            (offset_bits >> 3) < BLOCK_SIZE,
             "Byte offset, considered during squeezing, must be < 48 -bytes"
         );
         debug_assert!(
@@ -192,7 +192,7 @@ impl Xoofff {
         }
 
         words_to_le_bytes(&words, &mut self.oblk);
-        self.ooff = offset >> 3;
+        self.ooff = offset_bits >> 3;
 
         rolling::roll_xe(&mut self.omask);
     }
