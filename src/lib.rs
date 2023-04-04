@@ -6,7 +6,7 @@ pub mod xoodoo;
 mod xoodoo;
 
 mod xoofff;
-pub use xoofff::Xoofff;
+pub use crate::xoofff::Xoofff;
 
 #[cfg(test)]
 mod tests;
