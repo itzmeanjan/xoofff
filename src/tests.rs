@@ -35,6 +35,7 @@ fn test_xoofff_incremental_absorption(
     // oneshot absorption
     let mut deck0 = Xoofff::new(&key);
     deck0.absorb(&msg);
+    deck0.absorb(&[]); // empty message absorption should have no side effect !
     deck0.finalize(domain_seperator, ds_bit_width, offset);
     deck0.squeeze(&mut dig0);
 
