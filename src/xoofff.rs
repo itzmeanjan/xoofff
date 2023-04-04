@@ -14,13 +14,20 @@ const LANE_CNT: usize = BLOCK_SIZE / std::mem::size_of::<u32>();
 
 /// Xoofff is a deck function, obtained by instantiating Farfalle construction with
 /// Xoodoo\[6\] permutation and two rolling functions, having nice incremental input/
-/// output processing capability.
+/// output processing capability, offering ability of restarting `absorb->finalize->squeeze`
+/// cycle arbitrary number of times, so that arbitrary number of message sequences ( s.t.
+/// each message itself is arbitrary bytes wide ) can be consumed in very flexible fashion.
+///
+/// One can absorb arbitrary bytes wide message into deck function state and finalize it for
+/// squeezing any number of bytes. Once done with squeezing, when new message arrives,
+/// `absorb->finalize->squeeze` cycle can be restarted by calling `restart` function, which
+/// will prepare deck function state so that new message ( of arbitrary bytes ) can be consumed
+/// into deck function state. This way one can absorb messages from a sequence of arbitrary length.
 ///
 /// See https://ia.cr/2016/1188 for definition of Farfalle.
 /// Also see https://ia.cr/2018/767 for definition of Xoofff.
 #[derive(Clone, Copy)]
 pub struct Xoofff {
-    mkey: [u32; LANE_CNT],  // masked key
     imask: [u32; LANE_CNT], // input mask
     omask: [u32; LANE_CNT], // output mask
     acc: [u32; LANE_CNT],   // accumulator
@@ -48,7 +55,6 @@ impl Xoofff {
         xoodoo::permute::<ROUNDS>(&mut masked_key);
 
         Self {
-            mkey: masked_key,
             imask: masked_key,
             omask: [0u32; LANE_CNT],
             acc: [0u32; LANE_CNT],
@@ -119,7 +125,9 @@ impl Xoofff {
     /// - Attempting to absorb new message bytes on already finalized state, does nothing.
     /// - After finalization, one might start squeezing arbitrary many output bytes.
     /// - After finishing squeezing, when new message arrives, arbitrary many bytes
-    /// can be consumed into deck function state, by restarting `absorb -> finalize -> squeeze` cycle.
+    /// can be consumed into deck function state, by restarting `absorb->finalize->squeeze` cycle.
+    ///
+    /// This routine implements portion of algorithm 1 of https://ia.cr/2016/1188.
     #[inline(always)]
     pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset: usize) {
         debug_assert!(
@@ -194,6 +202,8 @@ impl Xoofff {
     /// of deck function state. One can call this function arbitrary many times, each time
     /// requesting arbitrary many bytes, if and only if state is already finalized and it's
     /// not yet restarted for processing another message using `absorb->finalize->squeeze` cycle.
+    ///
+    /// This routine implements last portion of algorithm 1 of https://ia.cr/2016/1188.
     #[inline(always)]
     pub fn squeeze(&mut self, out: &mut [u8]) {
         if self.finalized != usize::MAX {
@@ -226,6 +236,28 @@ impl Xoofff {
                 rolling::roll_xe(&mut self.omask);
             }
         }
+    }
+
+    /// Given that a message of arbitrary byte length is absorbed into deck function state and
+    /// it's also finalized i.e. ready to be squeezed, this function can be invoked when you've
+    /// new message waiting to be absorbed into deck function state and you need to restart the
+    /// `absorb->finalize->squeeze` cycle.
+    ///
+    /// Note, if the deck function state is not yet finalized, calling this function should do nothing.
+    /// Remember you're very much allowed to restart `absorb->finalize->squeeze` cycle any number of times
+    /// you want.
+    ///
+    /// This routine implements portion of algorithm 1 of https://ia.cr/2016/1188.
+    #[inline(always)]
+    pub fn restart(&mut self) {
+        if self.finalized != usize::MAX {
+            return;
+        }
+
+        self.omask.fill(0);
+        self.oblk.fill(0);
+        self.ooff = 0;
+        self.finalized = usize::MIN;
     }
 }
 
