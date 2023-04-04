@@ -23,3 +23,7 @@ bench = false
 name = "xoodoo"
 harness = false
 required-features = ["dev"]
+
+[[bench]]
+name = "xoofff"
+harness = false
