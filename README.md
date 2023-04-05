@@ -1,6 +1,12 @@
 # xoofff
 Farfalle with Xoodoo: Parallel Permutation-based Cryptography
 
+## Overview
+
+Farfalle is a keyed cryptographic function with extendable input and it's able to return an output of arbitrary length --- it offers a nice and flexible incremental property in both its input and output interfaces. For example, say we have two messages `X`, `Y` and we want to compute `F(X || Y)`, then the cost of processing it is only absoring `Y`, if `F(X)` is already processed. Once `X` is absorbed, you can finalize the state to squeeze arbitrary number of bytes from it. After that one can restart absorption phase, when `Y` is ready to be absorbed, then it can be finalized and arbitrary many bytes can again be squeezed. This way one can restart `absorb->finalize->squeeze` cycle again and again for processing arbitrary number of messages, while accumulator keeps the internal state intact over restarts. This idea is defined in https://ia.cr/2016/1188. And Xoofff is a farfalle contruction which is instantiated with Xoodoo permutation, which was described in https://ia.cr/2018/767. In this (later) paper, deck function name was proposed - which is a keyed function, that takes a sequence of input strings and returns a pseudorandom string of arbitrary length which can be incrementally computed s.t. the acronym **deck** stands for **D**oubly-**E**xtendable **C**ryptographic **K**eyed function. On top of Xoofff deck function, various modes of **S**ession **A**uthenticated **E**ncryption were proposed, *which are not yet implemented in this library*.
+
+Here I'm developing and maintaining a Rust library crate, implementing Xoofff deck function, along with authenticated encryption modes defined on top of it. See [below](#usage) for API usage examples.
+
 ## Prerequisites
 
 Rust stable toolchain, which you can obtain by following https://rustup.rs.
