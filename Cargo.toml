@@ -8,7 +8,7 @@ documentation = "https://github.com/itzmeanjan/xoofff"
 readme = "README.md"
 repository = "https://github.com/itzmeanjan/xoofff.git"
 license = "MIT"
-keywords = ["xoodoo", "farfalle", "deck-function", "authenticated-encryption", "xoofff"]
+keywords = ["xoodoo", "farfalle", "deck-function", "permutation", "xoofff"]
 categories = ["cryptography"]
 
 [dependencies]
