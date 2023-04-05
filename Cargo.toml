@@ -2,8 +2,14 @@
 name = "xoofff"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Anjan Roy <hello@itzmeanjan.in>"]
+description = "Farfalle with Xoodoo: Parallel Permutation-based Cryptography"
+documentation = "https://github.com/itzmeanjan/xoofff"
+readme = "README.md"
+repository = "https://github.com/itzmeanjan/xoofff.git"
+license = "MIT"
+keywords = ["xoodoo", "farfalle", "deck-function", "authenticated-encryption", "xoofff"]
+categories = ["cryptography"]
 
 [dependencies]
 crunchy = "=0.2.2"
