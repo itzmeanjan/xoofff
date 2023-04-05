@@ -55,10 +55,13 @@ fn test_xoofff_incremental_io(
     let mut off = 0;
     let mut read = 0u8;
     while off < dlen {
+        // because we don't want to be stuck in an infinite loop if read = 0,
+        // which is the case, at least in the first iteration.
         let elen = cmp::min(cmp::max(read as usize, 1), dlen - off);
 
         deck1.squeeze(&mut dig1[off..(off + elen)]);
         off += elen;
+        // update how many bytes to squeeze in next iteration ( if any ).
         read = dig1[off - 1];
     }
 
