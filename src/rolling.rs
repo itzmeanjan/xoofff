@@ -11,12 +11,8 @@ pub fn roll_xc(state: &mut [u32]) {
     state[0] ^= (state[0] << 13) ^ state[4].rotate_left(3);
     let b = cyclic_shift::<3, 0>(&state[..4]);
 
-    let (p0, tmp) = state.split_at_mut(4);
-    let (p1, p2) = tmp.split_at_mut(4);
-
-    p0.copy_from_slice(p1);
-    p1.copy_from_slice(p2);
-    p2.copy_from_slice(&b);
+    state.copy_within(4..12, 0);
+    state[8..12].copy_from_slice(&b);
 }
 
 /// State rolling function roll_Xe, updating Xoodoo permutation state, as described
@@ -31,10 +27,6 @@ pub fn roll_xe(state: &mut [u32]) {
     state[0] = tmp ^ state[0].rotate_left(5) ^ state[4].rotate_left(13) ^ 0x00000007u32;
     let b = cyclic_shift::<3, 0>(&state[..4]);
 
-    let (p0, tmp) = state.split_at_mut(4);
-    let (p1, p2) = tmp.split_at_mut(4);
-
-    p0.copy_from_slice(p1);
-    p1.copy_from_slice(p2);
-    p2.copy_from_slice(&b);
+    state.copy_within(4..12, 0);
+    state[8..12].copy_from_slice(&b);
 }
