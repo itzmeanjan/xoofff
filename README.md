@@ -3,9 +3,9 @@ Farfalle with Xoodoo: Parallel Permutation-based Cryptography
 
 ## Overview
 
-Farfalle is a keyed cryptographic function with extendable input and it's able to return an output of arbitrary length --- it offers a nice and flexible incremental property in both its input and output interfaces. For example, say we have two messages `X`, `Y` and we want to compute `F(X || Y)`, then the cost of processing it is only absoring `Y`, if `F(X)` is already processed. Once `X` is absorbed, you can finalize the state to squeeze arbitrary number of bytes from it. After that one can restart absorption phase, when `Y` is ready to be absorbed, then it can be finalized and arbitrary many bytes can again be squeezed. This way one can restart `absorb->finalize->squeeze` cycle again and again for processing arbitrary number of messages, while accumulator keeps the internal state intact over restarts. This idea is defined in https://ia.cr/2016/1188. And Xoofff is a farfalle contruction which is instantiated with Xoodoo permutation, which was described in https://ia.cr/2018/767. In this (later) paper, deck function name was proposed - which is a keyed function, that takes a sequence of input strings and returns a pseudorandom string of arbitrary length which can be incrementally computed s.t. the acronym **deck** stands for **D**oubly-**E**xtendable **C**ryptographic **K**eyed function. On top of Xoofff deck function, various modes of **S**ession **A**uthenticated **E**ncryption were proposed, *which are not yet implemented in this library*.
+Farfalle is a keyed cryptographic function with extendable input and it's able to return an output of arbitrary length --- it offers nice and flexible incremental property in both of its input and output interfaces. For example, say we have two messages `X`, `Y` and we want to compute `F(X || Y)`, then the cost of processing it is only absorbing `Y`, if `F(X)` is already processed. Once `X` is absorbed, you can finalize the state to squeeze arbitrary number of bytes from it. After that one can restart absorption phase, when `Y` is ready to be absorbed, then state can again be finalized and arbitrary many bytes can again be squeezed. This way one can restart `absorb` -> `finalize` -> `squeeze` cycle again and again for processing arbitrary number of messages, while accumulator keeps the internal state intact over restarts. This idea is defined in https://ia.cr/2016/1188. And Xoofff is a farfalle contruction which is instantiated with Xoodoo permutation, which was described in https://ia.cr/2018/767. In this (later) paper, deck function name was proposed - which is a keyed function, that takes a sequence of input strings ( of arbitrary length ) and returns a pseudorandom string of arbitrary length which can be incrementally computed s.t. the acronym **deck** stands for **D**oubly-**E**xtendable **C**ryptographic **K**eyed function.
 
-Here I'm developing and maintaining a Rust library crate, implementing Xoofff deck function, along with authenticated encryption modes defined on top of it. See [below](#usage) for API usage examples.
+Here I'm developing and maintaining a Rust library crate, implementing Xoofff deck function. See [below](#usage) for API usage examples.
 
 ## Prerequisites
 
@@ -19,14 +19,14 @@ rustc 1.68.2 (9eb3afe9e 2023-03-27)
 
 ## Testing
 
-For ensuring that both 
+For ensuring that Xoofff deck function is correctly implemented and both
 
 - oneshot message absorption into/ squeezing from deck function
 - incremental message absorption into/ squeezing from deck function
 
 reach same state, I maintain few test cases. You can run those by issuing
 
-> **Warning** I don't yet have any test vectors for ensuring that Xoofff - the deck function implementation itself is functionally correct. I hope that I'll be able to address this issue soon.
+> **Note** For ensuring functional correctness of Xoofff implementation, I use known answer tests, generated using reference implementation by Keccak team, following instructions specified on https://gist.github.com/itzmeanjan/504113021dec30a0909e5f5b47a5bde5.
 
 ```bash
 cargo test --lib
@@ -258,7 +258,7 @@ deck.squeeze(&mut dig[16..]);
 deck.squeeze(&mut []);
 ```
 
-6) Deck functions support extending input message without paying the cost of processing historical messages in message sequence, once again. Accumulator keeps the absorbed message state intact when state is finalized and ready to be squeezed. When deck function state is restarted, once again, it's ready to go through `absorb->finalize->squeeze` cycle.
+6) Deck functions support extending input message without paying the cost of processing historical messages in message sequence, once again. Accumulator keeps the absorbed message state intact when state is finalized and ready to be squeezed. When deck function state is restarted, once again, it's ready to go through `absorb` -> `finalize` -> `squeeze` cycle.
 
 ```rust
 deck.restart();
@@ -282,7 +282,7 @@ deck.finalize(0, 0, 8);
 deck.squeeze(&mut dig);
 ```
 
-10) As you understand, this way you can again restart by `absorb->finalize->squeeze` cycle, when new message is ready to be processed. Deck functions offer very flexible and extendable input/ output processing interfaces.
+10) As you understand, this way you can again restart by `absorb` -> `finalize` -> `squeeze` cycle, when new message is ready to be processed. Deck functions offer very flexible and extendable input/ output processing interfaces.
 
 I maintain one example, in [deck_function.rs](./examples/deck_function.rs), which you may want to check out. You can also run it by issuing.
 
