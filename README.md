@@ -197,7 +197,7 @@ Getting started with using Xoofff - deck function API is fairly easy.
 # either
 xoofff = { git = "https://github.com/itzmeanjan/xoofff" }
 # or
-xoofff = "0.1.0"
+xoofff = "=0.1.1"
 ```
 
 2) Create Xoofff deck function object.
