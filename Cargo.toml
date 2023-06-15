@@ -23,6 +23,7 @@ hex = "=0.4.3"
 
 [features]
 dev = []
+simd = []
 
 [lib]
 bench = false

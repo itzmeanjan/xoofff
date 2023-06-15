@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 mod rolling;
 
 #[cfg(feature = "dev")]
