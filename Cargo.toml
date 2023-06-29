@@ -18,11 +18,12 @@ crunchy = "=0.2.2"
 [dev-dependencies]
 rand = "=0.8.5"
 test-case = "=3.1.0"
-criterion = "=0.4.0"
+criterion = "=0.5.1"
 hex = "=0.4.3"
 
 [features]
 dev = []
+simd = []
 
 [lib]
 bench = false
