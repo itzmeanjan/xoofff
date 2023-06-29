@@ -1,10 +1,16 @@
+use super::xoodoo;
 use crate::rolling;
-use crate::xoodoo;
+use crate::xoodoo as serial_xoodoo;
+use crate::xoofff::{bytes_to_le_words, pad10x, words_to_le_bytes};
+use core::simd::{u32x4, SimdUint};
 use crunchy::unroll;
 use std::cmp;
 
-/// Xoodoo\[n_r\] being a 384 -bit permutation, messages are consumed in 48 -bytes chunks
+/// Xoodoo\[n_r\] being a 384-bit permutation messages are consumed in 48-byte chunks.
 const BLOCK_SIZE: usize = 48;
+
+/// The byte width of the parallel permutation.
+const PAR_BLOCK_SIZE: usize = BLOCK_SIZE * 4;
 
 /// \# -of rounds for Xoodoo permutation, see definition 3 of https://ia.cr/2018/767
 const ROUNDS: usize = 6;
@@ -26,16 +32,17 @@ const LANE_CNT: usize = BLOCK_SIZE / std::mem::size_of::<u32>();
 ///
 /// See https://ia.cr/2016/1188 for definition of Farfalle.
 /// Also see https://ia.cr/2018/767 for definition of Xoofff.
-#[derive(Clone, Copy)]
+///
+#[derive(Clone)]
 pub struct Xoofff {
-    imask: [u32; LANE_CNT], // input mask
-    omask: [u32; LANE_CNT], // output mask
-    acc: [u32; LANE_CNT],   // accumulator
-    iblk: [u8; BLOCK_SIZE], // input message block ( buffer )
-    oblk: [u8; BLOCK_SIZE], // output message block ( buffer )
-    ioff: usize,            // offset into input message block
-    ooff: usize,            // offset into output message block
-    finalized: usize,       // is deck function state finalized ?
+    imask: [u32; LANE_CNT],     // input mask
+    omask: [u32; LANE_CNT],     // output mask
+    acc: [u32x4; LANE_CNT],     // accumulator
+    iblk: [u8; PAR_BLOCK_SIZE], // input message block ( buffer )
+    oblk: [u8; PAR_BLOCK_SIZE], // output message block ( buffer )
+    ioff: usize,                // offset into input message block
+    ooff: usize,                // offset into output message block
+    finalized: usize,           // is deck function state finalized ?
 }
 
 impl Xoofff {
@@ -49,17 +56,16 @@ impl Xoofff {
             BLOCK_SIZE
         );
 
-        // masked key derivation phase
         let padded_key = pad10x(key);
         let mut masked_key = bytes_to_le_words(&padded_key);
-        xoodoo::permute::<ROUNDS>(&mut masked_key);
+        serial_xoodoo::permute::<ROUNDS>(&mut masked_key);
 
         Self {
             imask: masked_key,
             omask: [0u32; LANE_CNT],
-            acc: [0u32; LANE_CNT],
-            iblk: [0u8; BLOCK_SIZE],
-            oblk: [0u8; BLOCK_SIZE],
+            acc: [u32x4::splat(0u32); LANE_CNT],
+            iblk: [0u8; PAR_BLOCK_SIZE],
+            oblk: [0u8; PAR_BLOCK_SIZE],
             ioff: 0,
             ooff: 0,
             finalized: usize::MIN,
@@ -79,32 +85,52 @@ impl Xoofff {
             return;
         }
 
-        let blk_cnt = (self.ioff + msg.len()) / BLOCK_SIZE;
+        let par_blk_cnt = (self.ioff + msg.len()) / PAR_BLOCK_SIZE;
         let mut moff = 0;
 
-        for _ in 0..blk_cnt {
-            let byte_cnt = BLOCK_SIZE - self.ioff;
-
+        for _ in 0..par_blk_cnt {
+            let byte_cnt = PAR_BLOCK_SIZE - self.ioff;
             self.iblk[self.ioff..].copy_from_slice(&msg[moff..(moff + byte_cnt)]);
-            let mut words = bytes_to_le_words(&self.iblk);
 
-            debug_assert_eq!(LANE_CNT, 12);
+            let mut imasks = [[0u32; 12]; 4];
             unroll! {
-                for i in 0..12 {
-                    words[i] ^= self.imask[i];
+                for i in 0..4 {
+                    imasks[i] = self.imask;
+                    rolling::roll_xc(&mut self.imask);
                 }
             }
 
-            xoodoo::permute::<ROUNDS>(&mut words);
+            let imaskx = words_to_statex4(&imasks);
 
-            debug_assert_eq!(LANE_CNT, 12);
+            let mut words = [[0u32; 12]; 4];
             unroll! {
-                for i in 0..12 {
-                    self.acc[i] ^= words[i];
+                for i in 0..4 {
+                    words[i] = bytes_to_le_words(
+                        &self.iblk[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE]
+                            .try_into()
+                            .unwrap(),
+                    );
                 }
             }
 
-            rolling::roll_xc(&mut self.imask);
+            let mut states = words_to_statex4(&words);
+
+            debug_assert_eq!(LANE_CNT, 12);
+
+            unroll! {
+                for i in 0..12 {
+                    states[i] ^= imaskx[i];
+                }
+            }
+
+            xoodoo::permutex::<4, ROUNDS>(&mut states);
+
+            unroll! {
+                for i in 0..12 {
+                    self.acc[i] ^= states[i];
+                }
+            }
+
             moff += byte_cnt;
             self.ioff = 0;
         }
@@ -132,7 +158,7 @@ impl Xoofff {
     pub fn finalize(&mut self, domain_seperator: u8, ds_bit_width: usize, offset: usize) {
         debug_assert!(
             offset <= BLOCK_SIZE,
-            "Byte offset, considered during squeezing, must be <= 48 -bytes"
+            "Byte offset, considered during squeezing, must be <= 44 -bytes"
         );
         debug_assert!(
             ds_bit_width <= 7,
@@ -146,51 +172,83 @@ impl Xoofff {
         let mask = (1u8 << ds_bit_width) - 1u8;
         let pad_byte = (1u8 << ds_bit_width) | (domain_seperator & mask);
 
+        let blocks = self.ioff / BLOCK_SIZE + 1;
+
         self.iblk[self.ioff..].fill(0);
         self.iblk[self.ioff] = pad_byte;
 
-        let mut words = bytes_to_le_words(&self.iblk);
+        // Absorb the remainder in serial
+        let mut acc_final = [[0u32; 12]; 4];
+        for i in 0..blocks {
+            let mut words = bytes_to_le_words(
+                &self.iblk[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE]
+                    .try_into()
+                    .unwrap(),
+            );
 
-        debug_assert_eq!(LANE_CNT, 12);
+            debug_assert_eq!(LANE_CNT, 12);
+
+            unroll! {
+                for j in 0..12 {
+                    words[j] ^= self.imask[j];
+                }
+            }
+
+            serial_xoodoo::permute::<ROUNDS>(&mut words);
+
+            unroll! {
+                for j in 0..12 {
+                    acc_final[0][j] ^= words[j];
+                }
+            }
+
+            rolling::roll_xc(&mut self.imask);
+        }
+
+        let accx = words_to_statex4(&acc_final);
+
         unroll! {
             for i in 0..12 {
-                words[i] ^= self.imask[i];
+                self.acc[i] ^= accx[i];
             }
         }
 
-        xoodoo::permute::<ROUNDS>(&mut words);
-
-        debug_assert_eq!(LANE_CNT, 12);
-        unroll! {
-            for i in 0..12 {
-                self.acc[i] ^= words[i];
-            }
-        }
-
-        rolling::roll_xc(&mut self.imask);
         rolling::roll_xc(&mut self.imask);
 
         self.iblk.fill(0);
         self.ioff = 0;
         self.finalized = usize::MAX;
 
-        self.omask.copy_from_slice(&self.acc);
-        xoodoo::permute::<ROUNDS>(&mut self.omask);
+        unroll! {
+            for i in 0..12 {
+                self.omask[i] = self.acc[i].reduce_xor();
+            }
+        }
 
-        let mut words = self.omask;
-        xoodoo::permute::<ROUNDS>(&mut words);
+        serial_xoodoo::permute::<ROUNDS>(&mut self.omask);
+
+        let mut omasks = [[0u32; 12]; 4];
+        unroll! {
+            for i in 0..4 {
+                omasks[i] = self.omask;
+                rolling::roll_xe(&mut self.omask);
+            }
+        }
+
+        let mut states = words_to_statex4(&omasks);
+
+        xoodoo::permutex::<4, ROUNDS>(&mut states);
 
         debug_assert_eq!(LANE_CNT, 12);
         unroll! {
             for i in 0..12 {
-                words[i] ^= self.imask[i];
+                states[i] ^= u32x4::splat(self.imask[i]);
             }
         }
 
-        words_to_le_bytes(&words, &mut self.oblk);
-        self.ooff = offset;
+        statex4_to_bytes(&states, &mut self.oblk);
 
-        rolling::roll_xe(&mut self.omask);
+        self.ooff = offset;
     }
 
     /// Given that N -many message bytes are already absorbed into deck function state and
@@ -209,27 +267,36 @@ impl Xoofff {
         let mut off = 0;
 
         while off < out.len() {
-            let read = cmp::min(BLOCK_SIZE - self.ooff, out.len() - off);
-            out[off..(off + read)].copy_from_slice(&self.oblk[self.ooff..(self.ooff + read)]);
+            let read = cmp::min(PAR_BLOCK_SIZE - self.ooff, out.len() - off);
+            out[off..off + read].copy_from_slice(&self.oblk[self.ooff..self.ooff + read]);
 
             self.ooff += read;
             off += read;
 
-            if self.ooff == BLOCK_SIZE {
-                let mut words = self.omask;
-                xoodoo::permute::<ROUNDS>(&mut words);
+            if self.ooff == PAR_BLOCK_SIZE {
+                let mut omasks = [[0u32; 12]; 4];
+
+                unroll! {
+                    for i in 0..4 {
+                        omasks[i] = self.omask;
+                        rolling::roll_xe(&mut self.omask);
+                    }
+                }
+
+                let mut states = words_to_statex4(&omasks);
+
+                xoodoo::permutex::<4, ROUNDS>(&mut states);
 
                 debug_assert_eq!(LANE_CNT, 12);
                 unroll! {
                     for i in 0..12 {
-                        words[i] ^= self.imask[i];
+                        states[i] ^= u32x4::splat(self.imask[i]);
                     }
                 }
 
-                words_to_le_bytes(&words, &mut self.oblk);
-                self.ooff = 0;
+                statex4_to_bytes(&states, &mut self.oblk);
 
-                rolling::roll_xe(&mut self.omask);
+                self.ooff = 0;
             }
         }
     }
@@ -257,47 +324,55 @@ impl Xoofff {
     }
 }
 
-/// Given a message of length N -bytes ( s.t. N < 48 ), this routine pads the
-/// message following pad10* rule such that padded message length becomes 48 -bytes.
 #[inline(always)]
-pub(crate) fn pad10x(msg: &[u8]) -> [u8; BLOCK_SIZE] {
-    debug_assert!(
-        msg.len() < BLOCK_SIZE,
-        "Paddable message length must be < {}",
-        BLOCK_SIZE
-    );
-
-    let mlen = msg.len();
-    let mut res = [0u8; BLOCK_SIZE];
-
-    res[..mlen].copy_from_slice(msg);
-    res[mlen] = 0x01;
-
-    res
-}
-
-/// Given a byte array of length 48, this routine interprets those bytes as 12 unsigned
-/// 32 -bit integers (= u32) s.t. four consecutive bytes are placed in little endian order
-/// in a u32 word.
-#[inline(always)]
-pub(crate) fn bytes_to_le_words(bytes: &[u8; BLOCK_SIZE]) -> [u32; LANE_CNT] {
-    let mut words = [0u32; LANE_CNT];
+fn statex4_to_words(states: &[u32x4; LANE_CNT]) -> [[u32; LANE_CNT]; 4] {
+    let mut words = [[0u32; LANE_CNT]; 4];
 
     debug_assert_eq!(LANE_CNT, 12);
+
     unroll! {
         for i in 0..12 {
-            words[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
+            let arr = states[i].to_array();
+            for j in 0..4 {
+                words[j][i] = arr[j];
+            }
         }
     }
+
     words
 }
 
 #[inline(always)]
-pub(crate) fn words_to_le_bytes(words: &[u32; LANE_CNT], bytes: &mut [u8; BLOCK_SIZE]) {
-    debug_assert_eq!(LANE_CNT, 12);
+pub fn statex4_to_bytes(states: &[u32x4; LANE_CNT], out: &mut [u8; PAR_BLOCK_SIZE]) {
+    let words = statex4_to_words(&states);
+
     unroll! {
-        for i in 0..12 {
-            bytes[i * 4..(i + 1) * 4].copy_from_slice(&words[i].to_le_bytes());
+        for i in 0..4 {
+            words_to_le_bytes(
+                &words[i],
+                (&mut out[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE])
+                    .try_into()
+                    .unwrap(),
+            );
         }
     }
+}
+
+#[inline(always)]
+fn words_to_statex4(words: &[[u32; LANE_CNT]; 4]) -> [u32x4; LANE_CNT] {
+    let mut states = [u32x4::splat(0u32); LANE_CNT];
+
+    debug_assert_eq!(LANE_CNT, 12);
+
+    unroll! {
+        for i in 0..12 {
+            let mut arr = [0u32; 4];
+            for j in 0..4 {
+                arr[j] = words[j][i];
+            }
+            states[i] = u32x4::from_array(arr);
+        }
+    }
+
+    states
 }

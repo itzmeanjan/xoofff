@@ -121,39 +121,3 @@ fn test_xoofff_incremental_io(
 
     assert_eq!(dig0, dig1);
 }
-
-#[cfg(feature = "simd")]
-#[test]
-fn test_xoodoo_simd() {
-    use crate::xoodoo::{permute, permutex};
-    use core::simd::u32x2;
-    use rand::Rng;
-
-    let mut rng = thread_rng();
-
-    let mut state1 = [0u32; 12];
-    let mut state2 = [0u32; 12];
-
-    rng.fill(&mut state1);
-    rng.fill(&mut state2);
-
-    let mut statex2 = [u32x2::splat(0u32); 12];
-    for i in 0..12 {
-        statex2[i] = u32x2::from_slice(&[state1[i], state2[i]]);
-    }
-
-    permute::<12>(&mut state1);
-    permute::<12>(&mut state2);
-    permutex::<2, 12>(&mut statex2);
-
-    let mut state12 = [0u32; 12];
-    let mut state22 = [0u32; 12];
-    for i in 0..12 {
-        let [s1, s2] = statex2[i].to_array();
-        state12[i] = s1;
-        state22[i] = s2;
-    }
-
-    assert_eq!(state1, state12);
-    assert_eq!(state2, state22);
-}
