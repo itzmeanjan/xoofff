@@ -18,7 +18,11 @@ crunchy = "=0.2.2"
 [dev-dependencies]
 rand = "=0.8.5"
 test-case = "=3.3.1"
+criterion = "=0.5.1"
 hex = "=0.4.3"
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64", target_arch = "loongarch64"))'.dev-dependencies]
+criterion-cycles-per-byte = {git = "https://github.com/itzmeanjan/criterion-cycles-per-byte", rev = "63edc6b46"}
 
 [features]
 dev = []
