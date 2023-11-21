@@ -70,8 +70,8 @@ fn test_xoofff_kat() {
 #[test_case(32, 512, 1024, 0b10101, 5, 8; "key = 32B message = 512B digest = 1024B offset = 8B")]
 #[test_case(32, 1024, 2048, 0, 0, 16; "key = 32B message = 1024B digest = 2048B offset = 16B")]
 #[test_case(47, 2048, 4096, 0b1, 2, 16; "key = 47B message = 1024B digest = 4096B offset = 16B")]
-#[test_case(48, 1024, 32, 0, 0, 32 => panics; "key = 48B message = 1024B digest = 32B offset = 32B")]
-#[test_case(24, 1024, 32, 0, 0, 49 => panics; "key = 24B message = 1024B digest = 32B offset = 49B")]
+#[test_case(48, 1024, 32, 0, 0, 32 => panics "Key byte length must be < 48")]
+#[test_case(24, 1024, 32, 0, 0, 49 => panics "Byte offset, considered during squeezing, must be <= 48 -bytes")]
 fn test_xoofff_incremental_io(
     klen: usize,
     mlen: usize,
