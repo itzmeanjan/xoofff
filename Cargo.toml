@@ -1,6 +1,6 @@
 [package]
 name = "xoofff"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Anjan Roy <hello@itzmeanjan.in>"]
 description = "Farfalle with Xoodoo: Parallel Permutation-based Cryptography"
