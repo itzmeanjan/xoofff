@@ -14,51 +14,46 @@ fn test_xoofff_kat() {
     let file = File::open(kat_file).unwrap();
     let mut reader = BufReader::new(file).lines();
 
-    loop {
-        if let Some(line) = reader.next() {
-            // key to be used for instantiating deck function
-            let key = line.unwrap();
-            let key = key.split(" ").collect::<Vec<_>>()[1];
-            let key = hex::decode(key).unwrap();
+    while let Some(line) = reader.next() {
+        // key to be used for instantiating deck function
+        let key = line.unwrap();
+        let key = key.split(" ").collect::<Vec<_>>()[1];
+        let key = hex::decode(key).unwrap();
 
-            // message to be absorbed into deck function
-            let msg = reader.next().unwrap().unwrap();
-            let msg = msg.split(" ").collect::<Vec<_>>()[1];
-            let msg = hex::decode(msg).unwrap();
+        // message to be absorbed into deck function
+        let msg = reader.next().unwrap().unwrap();
+        let msg = msg.split(" ").collect::<Vec<_>>()[1];
+        let msg = hex::decode(msg).unwrap();
 
-            // # -of bytes to be skipped before message squeezing begins
-            let q = reader.next().unwrap().unwrap();
-            let q = q.split(" ").collect::<Vec<_>>()[1]
-                .parse::<usize>()
-                .unwrap();
+        // # -of bytes to be skipped before message squeezing begins
+        let q = reader.next().unwrap().unwrap();
+        let q = q.split(" ").collect::<Vec<_>>()[1]
+            .parse::<usize>()
+            .unwrap();
 
-            let out = reader.next().unwrap().unwrap();
-            let out = out.split(" ").collect::<Vec<_>>()[1];
+        let out = reader.next().unwrap().unwrap();
+        let out = out.split(" ").collect::<Vec<_>>()[1];
 
-            // expected squeezed bytes
-            let expected = hex::decode(out).unwrap();
-            // to be squeezed bytes
-            let mut computed = vec![0u8; expected.len()];
+        // expected squeezed bytes
+        let expected = hex::decode(out).unwrap();
+        // to be squeezed bytes
+        let mut computed = vec![0u8; expected.len()];
 
-            let mut deck = Xoofff::new(&key);
-            deck.absorb(&msg);
-            deck.finalize(0, 0, q);
-            deck.squeeze(&mut computed);
+        let mut deck = Xoofff::new(&key);
+        deck.absorb(&msg);
+        deck.finalize(0, 0, q);
+        deck.squeeze(&mut computed);
 
-            assert_eq!(
-                expected,
-                computed,
-                "key = {}, msg = {}, q = {}",
-                hex::encode(&key),
-                hex::encode(&msg),
-                q
-            );
+        assert_eq!(
+            expected,
+            computed,
+            "key = {}, msg = {}, q = {}",
+            hex::encode(&key),
+            hex::encode(&msg),
+            q
+        );
 
-            reader.next().unwrap().unwrap(); // skip the empty line
-        } else {
-            // no more test vectors, time to break out of loop
-            break;
-        }
+        reader.next().unwrap().unwrap(); // skip the empty line
     }
 }
 

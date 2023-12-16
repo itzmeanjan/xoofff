@@ -26,6 +26,7 @@ criterion-cycles-per-byte = "=0.6.0"
 
 [features]
 dev = []
+simd = []
 
 [lib]
 bench = false
